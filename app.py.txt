@@ -1,0 +1,243 @@
+import streamlit as st
+import pandas as pd
+import time
+import os
+from datetime import datetime
+
+# --- KONFIGURASI HALAMAN ---
+st.set_page_config(
+    page_title="Tes IST Online - PT Bumi Mas Wahyu",
+    page_icon="🧠",
+    layout="wide"
+)
+
+RESULTS_FILE = "ist_results.csv"
+ADMIN_PASSWORD = "adminbmw"  # Kata sandi HR Dashboard
+
+# --- INISIALISASI SESSION STATE ---
+if "page" not in st.session_state:
+    st.session_state.page = "register"
+if "user_info" not in st.session_state:
+    st.session_state.user_info = {}
+if "answers" not in st.session_state:
+    st.session_state.answers = {}
+if "start_time" not in st.session_state:
+    st.session_state.start_time = None
+if "admin_logged_in" not in st.session_state:
+    st.session_state.admin_logged_in = False
+
+# --- BANK SOAL IST (Dapat Ditambah/Disesuaikan) ---
+QUESTIONS_IST = [
+    # Subtes 1: SE (Melengkapi Kalimat)
+    {
+        "id": 1,
+        "subtest": "SE - Melengkapi Kalimat",
+        "no": "1",
+        "question": "Seekor kuda selalu mempunyai ...",
+        "img_url": None,
+        "options": ["A. Kandang", "B. Pelana", "C. Kukang", "D. Rambut leher", "E. Kurus"],
+        "correct": "D. Rambut leher"
+    },
+    {
+        "id": 2,
+        "subtest": "SE - Melengkapi Kalimat",
+        "no": "2",
+        "question": "Lawannya 'harapan' adalah ...",
+        "img_url": None,
+        "options": ["A. Duka", "B. Putus asa", "C. Penderitaan", "D. Cinta", "E. Kecewa"],
+        "correct": "B. Putus asa"
+    },
+    # Subtes 2: WA (Mencari Kata Berbeda)
+    {
+        "id": 3,
+        "subtest": "WA - Mencari Kata Berbeda",
+        "no": "3",
+        "question": "Pilihlah satu kata yang tidak memiliki kesamaan dengan kata lainnya:",
+        "img_url": None,
+        "options": ["A. Meja", "B. Kursi", "C. Lemari", "D. Tempat Tidur", "E. Burung"],
+        "correct": "E. Burung"
+    },
+    # Subtes 3: AN (Analogi Kata)
+    {
+        "id": 4,
+        "subtest": "AN - Analogi Kata",
+        "no": "4",
+        "question": "Hutan : Pohon = Tembok : ...",
+        "img_url": None,
+        "options": ["A. Rumah", "B. Batu bata", "C. Semen", "D. Cat", "E. Ruangan"],
+        "correct": "B. Batu bata"
+    },
+    # Subtes 6: ZR (Deret Angka)
+    {
+        "id": 5,
+        "subtest": "ZR - Deret Angka",
+        "no": "5",
+        "question": "Berapakah angka berikutnya dari deret: 2 - 4 - 6 - 8 - 10 - ...?",
+        "img_url": None,
+        "options": ["A. 11", "B. 12", "C. 13", "D. 14", "E. 15"],
+        "correct": "B. 12"
+    }
+]
+
+# --- NAVIGASI SIDEBAR ---
+st.sidebar.title("📌 Menu Navigasi")
+mode = st.sidebar.radio("Pilih Mode:", ["Portal Tes Pelamar", "Login Admin / HR"])
+
+# ==============================================================================
+# MODE 1: PORTAL TES PELAMAR
+# ==============================================================================
+if mode == "Portal Tes Pelamar":
+
+    # --- HALAMAN 1: REGISTRASI ---
+    if st.session_state.page == "register":
+        st.title("🏛️ PT Bumi Mas Wahyu")
+        st.subheader("Portal Psikotes Online - Intelligenz-Struktur-Test (IST)")
+        st.info("Silakan isi data diri Anda sebelum memulai tes struktur intelegensi.")
+        
+        with st.form("form_registrasi"):
+            nama = st.text_input("Nama Lengkap")
+            email = st.text_input("Email")
+            no_hp = st.text_input("Nomor WhatsApp/HP")
+            posisi = st.selectbox("Posisi yang Dilamar", [
+                "Staff Closing (Sales / CS)",
+                "Admin Rekrutmen / HR",
+                "Supervisor Penjualan",
+                "Staff Keuangan / Akuntansi",
+                "Arsitek / Site Engineer",
+                "Posisi Lainnya"
+            ])
+            
+            btn_start = st.form_submit_button("Mulai Tes IST 🚀")
+            
+            if btn_start:
+                if not nama or not no_hp or not email:
+                    st.error("Harap isi seluruh data diri secara lengkap.")
+                else:
+                    st.session_state.user_info = {
+                        "nama": nama,
+                        "email": email,
+                        "no_hp": no_hp,
+                        "posisi": posisi,
+                        "tanggal": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    st.session_state.start_time = time.time()
+                    st.session_state.page = "test"
+                    st.rerun()
+
+    # --- HALAMAN 2: PENGERJAAN TES IST ---
+    elif st.session_state.page == "test":
+        st.title("🧠 Tes IST (Intelligenz-Struktur-Test)")
+        st.caption(f"Pelamar: **{st.session_state.user_info['nama']}** | Posisi: **{st.session_state.user_info['posisi']}**")
+        
+        # Timer Global Tes (45 Menit = 2700 detik)
+        time_limit = 2700
+        elapsed = int(time.time() - st.session_state.start_time)
+        remaining = max(0, time_limit - elapsed)
+        mins, secs = divmod(remaining, 60)
+        
+        st.warning(f"⏱️ **Sisa Waktu Pengerjaan:** {mins:02d}:{secs:02d}")
+        
+        if remaining == 0:
+            st.error("⏰ Waktu habis! Jawaban Anda otomatis dikirim.")
+            st.session_state.page = "result"
+            st.rerun()
+            
+        with st.form("form_ist_test"):
+            for q in QUESTIONS_IST:
+                st.markdown(f"### Soal No. {q['no']} — [{q['subtest']}]")
+                st.write(q['question'])
+                
+                # Tampilkan gambar jika ada (khusus subtes spasial/bentuk)
+                if q.get('img_url') and os.path.exists(q['img_url']):
+                    st.image(q['img_url'], width=350)
+                
+                ans = st.radio(
+                    f"Pilih Jawaban No. {q['no']}:",
+                    options=q['options'],
+                    key=f"ist_q_{q['id']}"
+                )
+                st.session_state.answers[q['id']] = ans
+                st.markdown("---")
+                
+            btn_submit = st.form_submit_button("Selesaikan Tes IST 📤")
+            if btn_submit:
+                st.session_state.page = "result"
+                st.rerun()
+
+    # --- HALAMAN 3: PENYIMPANAN HASIL ---
+    elif st.session_state.page == "result":
+        st.title("✅ Tes IST Selesai")
+        
+        # Hitung Jumlah Benar
+        correct_count = sum(1 for q in QUESTIONS_IST if st.session_state.answers.get(q['id']) == q['correct'])
+        total_soal = len(QUESTIONS_IST)
+        persentase = int((correct_count / total_soal) * 100) if total_soal > 0 else 0
+        
+        st.success(f"Terima kasih **{st.session_state.user_info['nama']}**, jawaban Anda telah berhasil dicatat.")
+        
+        # Simpan ke File CSV
+        result_data = {
+            **st.session_state.user_info,
+            "jumlah_benar": correct_count,
+            "total_soal": total_soal,
+            "skor_persen": f"{persentase}%"
+        }
+        df_new = pd.DataFrame([result_data])
+        
+        if os.path.exists(RESULTS_FILE):
+            df_final = pd.concat([pd.read_csv(RESULTS_FILE), df_new], ignore_index=True)
+        else:
+            df_final = df_new
+            
+        df_final.to_csv(RESULTS_FILE, index=False)
+        st.info(" Data Anda otomatis terhubung dengan database rekrutmen PT Bumi Mas Wahyu.")
+
+# ==============================================================================
+# MODE 2: DASHBOARD ADMIN / HR
+# ==============================================================================
+elif mode == "Login Admin / HR":
+    st.title("🔐 Dashboard Admin Rekrutmen - PT Bumi Mas Wahyu")
+    
+    if not st.session_state.admin_logged_in:
+        pwd = st.text_input("Masukkan Kata Sandi Admin:", type="password")
+        if st.button("Login"):
+            if pwd == ADMIN_PASSWORD:
+                st.session_state.admin_logged_in = True
+                st.success("Login Berhasil!")
+                st.rerun()
+            else:
+                st.error("Kata sandi salah!")
+    else:
+        st.sidebar.button("Logout", on_click=lambda: st.session_state.update({"admin_logged_in": False}))
+        
+        if not os.path.exists(RESULTS_FILE):
+            st.warning("Belum ada data pelamar yang masuk.")
+        else:
+            df_results = pd.read_csv(RESULTS_FILE)
+            
+            # Metric Summary
+            col1, col2 = st.columns(2)
+            col1.metric("Total Pelamar Tes IST", len(df_results))
+            col2.metric("Rata-rata Skor (%)", f"{df_results['skor_persen'].str.rstrip('%').astype(float).mean():.1f}%")
+            
+            st.markdown("---")
+            
+            # Tabel Rekap & Filter
+            st.subheader("📊 Rekapitulasi Hasil Tes IST Pelamar")
+            posisi_filter = st.selectbox("Filter Berdasarkan Posisi:", ["Semua Posisi"] + list(df_results["posisi"].unique()))
+            
+            if posisi_filter != "Semua Posisi":
+                df_display = df_results[df_results["posisi"] == posisi_filter]
+            else:
+                df_display = df_results
+                
+            st.dataframe(df_display, use_container_width=True)
+            
+            # Unduh Data CSV/Excel
+            csv = df_display.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Unduh Rekap Hasil Tes IST (CSV / Excel)",
+                data=csv,
+                file_name=f"rekap_ist_bmw_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime='text/csv'
+            )
